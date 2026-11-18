@@ -1,0 +1,83 @@
+[package]
+name = "hylmail-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "HylMail business logic: protocols, persistence, secrets, rules, MIME pipeline"
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+bitflags.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-appender.workspace = true
+rusqlite.workspace = true
+secrecy.workspace = true
+tempfile.workspace = true
+regex-lite.workspace = true
+parking_lot.workspace = true
+
+# -- phase 2: protocols and sync engine --------------------------------------
+tokio.workspace = true
+futures-util.workspace = true
+base64.workspace = true
+async-imap.workspace = true
+imap-proto.workspace = true
+tokio-rustls.workspace = true
+rustls.workspace = true
+rustls-platform-verifier.workspace = true
+lettre.workspace = true
+# The OAuth2 `S256` challenge is a SHA-256 digest of the PKCE verifier, and the
+# loopback redirect of RFC 8252 is served by `tokio`'s own listener.
+sha2.workspace = true
+
+# -- phase 3: EWS and GroupWise proxy over SOAP/HTTP -------------------------
+# Both protocols are XML over HTTP; `quick-xml` is used to build the requests
+# and to walk the responses without pulling in a full DOM implementation.
+reqwest.workspace = true
+quick-xml.workspace = true
+url.workspace = true
+# NTLM (`MS-NLMP`) is the only authentication Exchange on-premises is
+# guaranteed to offer; `net::ntlm` builds it from MD4 and HMAC-MD5.
+hmac.workspace = true
+md4.workspace = true
+md-5.workspace = true
+
+# -- phase 4: MIME pipeline, HTML sanitising, calendar, inline images --------
+mail-parser.workspace = true
+icalendar.workspace = true
+ammonia.workspace = true
+html5ever.workspace = true
+scraper.workspace = true
+ego-tree.workspace = true
+resvg.workspace = true
+image.workspace = true
+
+# `keyring` 4.x switched to the `keyring-core` "store registration" model which
+# requires explicit runtime store initialisation.  3.6 keeps the simple
+# `Entry::new(service, user)` API while still talking to the OS credential
+# vault (DPAPI, Keychain, Secret Service).
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(all(not(target_os = "windows"), not(target_os = "macos")))'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["sync-secret-service", "crypto-rust"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+# The protocol tests run a fake IMAP/SMTP server on a loopback socket, so they
+# need a real tokio runtime and a stream combinator.
+tokio = { workspace = true, features = ["test-util"] }
+futures-util.workspace = true
+
+[lints]
+workspace = true

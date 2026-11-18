@@ -1,0 +1,198 @@
+# =============================================================================
+#  HylMail - Workspace
+# =============================================================================
+#  HylMail is a cross-platform (macOS / Windows / Linux) desktop mail client that
+#  unifies IMAP, Exchange (on-premises, EWS) and Novell/MicroFocus GroupWise
+#  proxy mailboxes behind one native UI.
+#
+#  Layout
+#  ------
+#    hylmail-core : pure business logic - protocols, database, crypto/secrets,
+#                  HTML sanitizer, rule engine.  MUST NOT depend on any UI.
+#    hylmail-gui  : native desktop UI (Slint or egui/eframe).
+#    hylmail-cli  : the two launchers built from one library - `hylmail-gui`
+#                  (opens the window when the command line is empty) and
+#                  `hylmail-cli` (prints the usage text instead).  Holds the
+#                  single-instance IPC, the panic hook and the UI boot.
+#
+#  Single source of truth for the version: it is defined here in
+#  `[workspace.package]` only and referenced everywhere via `version.workspace
+#  = true` (and read at runtime through `env!("CARGO_PKG_VERSION")`).
+# =============================================================================
+
+[workspace]
+resolver = "2"
+members = [
+    "crates/hylmail-core",
+    "crates/hylmail-gui",
+    "crates/hylmail-cli",
+]
+default-members = ["crates/hylmail-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+# `async-imap` 0.12 is edition 2024 and requires 1.88, which makes it the
+# effective minimum of the whole workspace.
+rust-version = "1.88"
+license = "MIT"
+authors = ["HylMail Contributors"]
+repository = "https://example.invalid/hylmail"
+homepage = "https://example.invalid/hylmail"
+description = "Cross-platform mail client for IMAP, Exchange (EWS) and GroupWise proxy mailboxes"
+keywords = ["email", "imap", "exchange", "groupwise", "desktop"]
+categories = ["email", "gui"]
+
+# -----------------------------------------------------------------------------
+#  Mandatory technology stack (see project specification section 1.2).
+#
+#  Entries are added here as the corresponding phase consumes them so that the
+#  version of every third party crate has exactly one source of truth.  The
+#  block below is the agreed, binding stack; crates which are not yet used by a
+#  member are marked with the phase that will consume them.
+# -----------------------------------------------------------------------------
+[workspace.dependencies]
+# -- workspace members -------------------------------------------------------
+hylmail-core = { path = "crates/hylmail-core", version = "0.1.0" }
+hylmail-gui = { path = "crates/hylmail-gui", version = "0.1.0" }
+
+# -- phase 1: workspace, models, persistence, secrets, logging ---------------
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+anyhow = "1.0"
+uuid = { version = "1.10", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde", "clock"] }
+bitflags = { version = "2.6", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }
+tracing-appender = "0.2"
+rusqlite = { version = "0.42", features = ["bundled"] }
+secrecy = "0.10"
+tempfile = "3.13"
+# `regex-lite` covers the small patterns the rule engine and the log redactor
+# use (anchors, `(?i)`, `\b`, classes, alternation) and pulls in **no**
+# dependencies, unlike `regex` (aho-corasick, regex-automata, regex-syntax).
+regex-lite = "0.1"
+parking_lot = "0.12"
+
+# -- phase 2: protocols & sync engine ---------------------------------------
+tokio = { version = "1.42", features = ["rt-multi-thread", "macros", "net", "time", "sync", "fs", "io-util", "signal"] }
+# `sink` is not used (only `TryStreamExt`/`future::join_all`), so it stays off.
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+base64 = "0.23"
+# `imap-proto` supplies the response types `async-imap` parses into.  Depending
+# on it directly keeps the protocol parsing free of `async_imap::types`
+# re-exports, and pins the parser version next to the client version.
+imap-proto = "0.17"
+# `async-imap` 0.12 carries no TLS of its own: we build the rustls stream and
+# hand it over, which is why `tokio-rustls` is a direct dependency here.
+async-imap = { version = "0.12", default-features = false, features = ["runtime-tokio"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
+# lettre drives SMTP over tokio and reuses the platform trust store through
+# `rustls-platform-verifier`, so an on-premises Exchange server with an
+# internal CA is trusted exactly like the operating system trusts it.
+#
+# `pool` is deliberately absent: HylMail submits a handful of messages a day, and
+# lettre's pool spawns a background task the moment a transport is *built*, which
+# makes a transport creation outside a tokio runtime fail.
+lettre = { version = "0.11", default-features = false, features = [
+    "builder",
+    "smtp-transport",
+    "hostname",
+    "tokio1-rustls-tls",
+    "rustls-platform-verifier",
+] }
+# `json` and `stream` are not used: bodies are built with `quick-xml`/forms and
+# JSON is parsed with `serde_json`, so both features are dropped.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "charset", "cookies"] }
+quick-xml = { version = "0.42", features = ["serialize"] }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rustls-platform-verifier = "0.7"
+# Exchange on-premises authenticates EWS with NTLM (`MS-NLMP`).  The protocol
+# is implemented in `hylmail-core::net::ntlm` from these two primitives instead
+# of `sspi` / `ntlmclient`: `sspi` 0.23 needs rustc 1.93, pulls in a Kerberos
+# and PKI dependency tree, and defaults to a second TLS crypto provider, while
+# `ntlmclient` binds a C library (cmake plus OpenSSL) and would end the
+# "one `cargo build` on every platform" property.  NTLMv2 needs nothing beyond
+# MD4 (the NT hash) and HMAC-MD5 (the two responses); `hmac` 0.12 and
+# `digest` 0.10 are already in the graph through `keyring`.
+hmac = "0.12"
+md4 = "0.10"
+md-5 = "0.10"
+url = "2.5"
+# PKCE ("S256") is a SHA-256 of the verifier; the digest crates are already
+# present transitively, but naming `sha2` keeps the algorithm explicit.
+sha2 = "0.10"
+
+# -- phase 4: MIME / HTML / calendar pipeline --------------------------------
+# `mail-parser` carries a complete RFC 8621 "message view": it decodes transfer
+# encodings and charsets, classifies every part into text body, HTML body and
+# attachments, and never panics on hostile input.
+mail-parser = "1.0"
+# `icalendar` reads the `text/calendar` parts that arrive as invitations.
+icalendar = "0.17"
+# `ammonia` is the sanitiser: an allow-list over `html5ever`, so a message can
+# never smuggle a script, a frame or an `onclick` into the reading pane.
+ammonia = "4.0"
+# `html5ever` is the parser `ammonia` and `scraper` share; naming it directly
+# keeps the DOM version in one place.
+html5ever = "0.40"
+# `scraper` walks the parsed DOM - used to turn HTML into the plain text
+# alternative, to rewrite `cid:` images and to find tracking pixels.
+# `ego-tree` is the node type behind `scraper`'s DOM; naming it directly makes
+# the recursive walk in `html::text` expressible without another parser.
+scraper = "0.29"
+ego-tree = "0.11"
+# `resvg` rasterises SVG attachments and inline SVG; `text` and
+# `system-fonts` are required for SVG that contains text.
+resvg = { version = "0.50", default-features = false, features = ["text", "system-fonts"] }
+# `image` decodes the raster bodies of remote images the user explicitly
+# allowed.  Only the PNG and JPEG codecs are enabled: they are the two already
+# present in the dependency graph and cover the overwhelming majority of mail
+# images, while keeping the binary (and the attack surface) small.
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+
+# -- phase 5: the native user interface --------------------------------------
+# eframe 0.33 is the newest release whose MSRV is still 1.88, the workspace
+# minimum.  The `glow` (OpenGL) backend is chosen over `wgpu` because it has a
+# far smaller dependency tree and reaches every virtual machine and remote
+# session the target audience uses.
+egui = { version = "0.33", default-features = false, features = ["default_fonts"] }
+eframe = { version = "0.33", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "wayland",
+    "x11",
+] }
+# `egui_extras` supplies the virtualised `TableBuilder` the message list needs
+# and the PNG image loader that renders inline `cid:` images and attachments.
+egui_extras = { version = "0.33", features = ["image"] }
+# Native file chooser for "Anhang hinzufügen"; the XDG portal backend avoids a
+# hard GTK3 link on Linux.
+rfd = { version = "0.15", default-features = false, features = ["xdg-portal", "tokio"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+# Quality gate from the specification: no `unwrap()` / `expect()` in production
+# code.  Test modules re-enable both via `cfg_attr(test, ...)`.
+unwrap_used = "deny"
+expect_used = "deny"
+todo = "warn"
+dbg_macro = "deny"
+print_stdout = "warn"
+print_stderr = "warn"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[profile.dev]
+# Debug builds of a GUI application are painful with fully optimised
+# dependencies; keep our own crates debuggable but dependencies fast.
+opt-level = 0

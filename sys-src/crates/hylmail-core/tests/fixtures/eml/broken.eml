@@ -1,0 +1,6 @@
+From: Ada <ada@example.org>
+To: Bob <bob@example.org>
+Subject: Kein gueltiges MIME
+Message-ID: <broken-1@example.org>
+
+dieser Koerper hat keinen Inhaltstyp, aber einen Text.

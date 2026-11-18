@@ -1,0 +1,84 @@
+[package]
+name = "hylmail-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "HylMail launchers: `hylmail-cli` for diagnostics and scripts, `hylmail-gui` for the desktop"
+publish = false
+# `cargo run -p hylmail-cli` without a `--bin` starts the application.
+default-run = "hylmail-gui"
+
+[lib]
+name = "hylmail_cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "hylmail-cli"
+path = "src/main.rs"
+
+[[bin]]
+name = "hylmail-gui"
+path = "src/gui_main.rs"
+# `cargo doc` would write this target as `hylmail_gui`, which is also the file
+# name of the `hylmail-gui` library crate; Cargo then reports an output filename
+# collision.  The launcher's documentation lives in `src/lib.rs` anyway.
+doc = false
+
+[dependencies]
+hylmail-core.workspace = true
+hylmail-gui.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+# `--sync` drives the IMAP client, which is asynchronous.
+tokio.workspace = true
+secrecy.workspace = true
+# `--compose` reads a draft JSON document; the composer needs a timestamp.
+serde_json.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+# `cargo deb -p hylmail-cli` turns the two launchers into a single `.deb`; the
+# assets and the licence below are the only packaging input it needs.  The
+# binary paths start with `target/`, which is the *workspace* target directory,
+# everything else is relative to this manifest.
+#
+# `$auto` only sees the libraries the binaries actually link against, and
+# winit/glutin open X11, Wayland, xkbcommon and OpenGL through `dlopen` at
+# run time, so those four are named by hand; without them a minimal
+# installation starts no window.
+[package.metadata.deb]
+name = "hylmail"
+maintainer = "HylMail Contributors <hylmail@example.invalid>"
+copyright = "2026, HylMail Contributors"
+license-file = ["../../LICENSE", "0"]
+extended-description = """\
+ HylMail is a desktop mail client for IMAP, Exchange (EWS) and GroupWise.  It
+ keeps a local index of the headers it has synchronised and renders HTML mail
+ with a bundled sanitiser, so it needs no browser engine.
+ .
+ This package installs two launchers: `hylmail-gui`, the window, and
+ `hylmail-cli`, the diagnostics and scripting front end.
+"""
+depends = "$auto, libx11-6, libxkbcommon0, libwayland-client0, libgl1"
+section = "mail"
+priority = "optional"
+assets = [
+    ["target/release/hylmail-gui", "usr/bin/", "755"],
+    ["target/release/hylmail-cli", "usr/bin/", "755"],
+    ["../../packaging/linux/de.hylmail.HylMail.desktop", "usr/share/applications/", "644"],
+    ["../../packaging/icons/hylmail-16.png", "usr/share/icons/hicolor/16x16/apps/de.hylmail.HylMail.png", "644"],
+    ["../../packaging/icons/hylmail-24.png", "usr/share/icons/hicolor/24x24/apps/de.hylmail.HylMail.png", "644"],
+    ["../../packaging/icons/hylmail-32.png", "usr/share/icons/hicolor/32x32/apps/de.hylmail.HylMail.png", "644"],
+    ["../../packaging/icons/hylmail-48.png", "usr/share/icons/hicolor/48x48/apps/de.hylmail.HylMail.png", "644"],
+    ["../../packaging/icons/hylmail-64.png", "usr/share/icons/hicolor/64x64/apps/de.hylmail.HylMail.png", "644"],
+    ["../../packaging/icons/hylmail-128.png", "usr/share/icons/hicolor/128x128/apps/de.hylmail.HylMail.png", "644"],
+    ["../../packaging/icons/hylmail-256.png", "usr/share/icons/hicolor/256x256/apps/de.hylmail.HylMail.png", "644"],
+    ["../../packaging/icons/hylmail-512.png", "usr/share/icons/hicolor/512x512/apps/de.hylmail.HylMail.png", "644"],
+    ["../../README.md", "usr/share/doc/hylmail/README.md", "644"],
+]
+
+[lints]
+workspace = true

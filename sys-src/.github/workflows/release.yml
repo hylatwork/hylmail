@@ -1,0 +1,233 @@
+name: Release
+
+# Tag `v0.1.0` (anything that matches the `[workspace.package]` version) and the
+# four packages are attached to a draft-less GitHub release.  `workflow_dispatch`
+# rebuilds the same packages without touching a release, which is what the
+# packaging scripts are smoke-tested with.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: version
+        run: |
+          set -euo pipefail
+          version="$(cargo metadata --format-version 1 --no-deps \
+            | jq -r '.packages[] | select(.name == "hylmail-cli") | .version')"
+          if [ -z "$version" ] || [ "$version" = "null" ]; then
+            echo "cannot read the workspace version" >&2
+            exit 1
+          fi
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+          echo "packaging HylMail $version"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$version" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match version $version" >&2
+            exit 1
+          fi
+
+  windows:
+    name: Windows (Inno + MSI)
+    runs-on: windows-latest
+    needs: version
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --workspace --release
+
+      # The same tool versions the templates were verified with locally: Inno
+      # Setup 6.7.4 compiled `hylmail.iss` under Wine, WiX 3.14.1 compiled
+      # `hylmail.wxs` into the MSI. Both are pinned so a new release of either
+      # tool cannot change the output. Inno Setup 7 is deliberately not used -
+      # its installer refuses to run on anything older than Windows 11.
+      - name: Install Inno Setup
+        run: |
+          curl.exe -sSfL -o innosetup.exe https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe
+          Start-Process -Wait -FilePath .\innosetup.exe -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART'
+      - name: Install WiX 3
+        run: |
+          curl.exe -sSfL -o wix314-binaries.zip https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip
+          Expand-Archive wix314-binaries.zip -DestinationPath wix314
+
+      - name: Inno Setup installer
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $iscc = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) { throw "ISCC.exe was not installed" }
+          & $iscc "/DHylMailVersion=$env:VERSION" packaging\windows\hylmail.iss
+      - name: MSI
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          .\wix314\candle.exe -nologo -dHylMailVersion=$env:VERSION -out dist\hylmail.wixobj packaging\windows\hylmail.wxs
+          .\wix314\light.exe -nologo -sice:ICE61 -out "dist\HylMail-$env:VERSION.msi" dist\hylmail.wixobj
+      - name: Check the installers
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          $expected = @("dist\HylMail-$env:VERSION-setup.exe", "dist\HylMail-$env:VERSION.msi")
+          foreach ($file in $expected) {
+            $item = Get-Item $file
+            if ($item.Length -lt 5MB) { throw "$file is suspiciously small" }
+            Write-Host "$file $($item.Length) bytes"
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            dist/HylMail-*-setup.exe
+            dist/HylMail-*.msi
+          if-no-files-found: error
+
+  macos:
+    name: macOS (dmg)
+    runs-on: macos-latest
+    needs: version
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          # A single bundle that runs on Apple silicon and Intel alike.
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: |
+          cargo build --release -p hylmail-cli --target aarch64-apple-darwin
+          cargo build --release -p hylmail-cli --target x86_64-apple-darwin
+      - name: Merge the two architectures
+        run: |
+          mkdir -p target/universal/release
+          for binary in hylmail-gui hylmail-cli; do
+            lipo -create \
+              target/aarch64-apple-darwin/release/$binary \
+              target/x86_64-apple-darwin/release/$binary \
+              -output target/universal/release/$binary
+            lipo -info target/universal/release/$binary
+          done
+      - name: App bundle and disk image
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          packaging/macos/make-app.sh "$VERSION" target/universal/release
+          packaging/macos/make-dmg.sh "$VERSION"
+      - name: Check the disk image
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          hdiutil verify "dist/HylMail-$VERSION.dmg"
+          mount="$(mktemp -d)"
+          hdiutil attach "dist/HylMail-$VERSION.dmg" -nobrowse -readonly -mountpoint "$mount"
+          test -x "$mount/HylMail.app/Contents/MacOS/hylmail-gui"
+          test -x "$mount/HylMail.app/Contents/MacOS/hylmail-cli"
+          test -f "$mount/HylMail.app/Contents/Resources/HylMail.icns"
+          hdiutil detach "$mount"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: dist/HylMail-*.dmg
+          if-no-files-found: error
+
+  linux:
+    name: Linux (deb + tarball)
+    runs-on: ubuntu-latest
+    needs: version
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libdbus-1-dev pkg-config \
+            libxkbcommon-dev libwayland-dev libx11-dev libgl1-mesa-dev
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb
+      - name: Build
+        run: cargo build --release -p hylmail-cli
+
+      - name: Debian package
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          cargo deb -p hylmail-cli --no-build
+          deb="$(ls target/debian/hylmail_*.deb)"
+          mkdir -p dist
+          cp "$deb" "dist/HylMail-$VERSION-amd64.deb"
+      - name: Tarball
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: packaging/linux/make-tarball.sh "$VERSION"
+      - name: Check the packages
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          deb="dist/HylMail-$VERSION-amd64.deb"
+          contents="$(dpkg-deb -c "$deb")"
+          control="$(dpkg-deb -I "$deb")"
+          grep -q 'usr/bin/hylmail-gui' <<<"$contents"
+          grep -q 'usr/bin/hylmail-cli' <<<"$contents"
+          grep -q 'usr/share/applications/de.oth-aw.HylMail.desktop' <<<"$contents"
+          grep -q 'hicolor/256x256' <<<"$contents"
+          grep -q "Version: $VERSION" <<<"$control"
+          # `$auto` has to have resolved the X11/GL libraries into real depends.
+          grep -qE 'Depends: .*libc6' <<<"$control"
+          archive="dist/HylMail-$VERSION-x86_64-unknown-linux-gnu.tar.gz"
+          members="$(tar -tzf "$archive")"
+          grep -q 'HylMail-.*/bin/hylmail-gui' <<<"$members"
+          grep -q 'HylMail-.*/bin/hylmail-cli' <<<"$members"
+          grep -q 'HylMail-.*/share/applications/de.oth-aw.HylMail.desktop' <<<"$members"
+          tar -xzf "$archive" -O "$(tar -tzf "$archive" | grep 'bin/hylmail-gui$')" > /dev/null
+          echo "$contents"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            dist/HylMail-*.deb
+            dist/HylMail-*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    needs: [version, windows, macos, linux]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+      - name: List the packages
+        run: ls -l dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: HylMail ${{ needs.version.outputs.version }}
+          draft: false
+          generate_release_notes: true
+          files: dist/*
+          fail_on_unmatched_files: true

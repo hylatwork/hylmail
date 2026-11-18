@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=HylMail
+GenericName=Mail Client
+Comment=IMAP, Exchange (EWS) and GroupWise mailboxes in one native client
+Comment[de]=IMAP-, Exchange- (EWS) und GroupWise-Postfächer in einem nativen Client
+Exec=hylmail-gui %F
+Icon=de.hylmail.HylMail
+Terminal=false
+Categories=Network;Email;Office;
+Keywords=email;mail;imap;exchange;ews;groupwise;Mail;E-Mail;
+StartupNotify=true
+StartupWMClass=de.hylmail.HylMail
+MimeType=message/rfc822;

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  HylMail application icon: the source of every shipped raster.
+
+  It is drawn in the palette of `hylmail_gui::theme` (bg 14161B, panel 1B1E25,
+  border 2F3541, accent 4C8DFF, text E7EAF0, flagged F5C451): a dark rounded
+  tile with an accent coloured envelope and a small "new mail" badge.
+
+  The PNG scales, the Windows `.ico` and the macOS `.icns` next to this file
+  are generated from it by the ignored `regenerate_the_icon_set` test in
+  `crates/hylmail-core/tests/icon_assets.rs`.  Edit this file, not the rasters.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <rect x="6" y="6" width="244" height="244" rx="52" fill="#1B1E25"/>
+  <rect x="6" y="6" width="244" height="244" rx="52" fill="none" stroke="#2F3541" stroke-width="5"/>
+  <rect x="44" y="74" width="168" height="110" rx="16" fill="#4C8DFF"/>
+  <path d="M60 92 L128 144 L196 92" fill="none" stroke="#E7EAF0"
+        stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="203" cy="72" r="26" fill="#14161B"/>
+  <circle cx="203" cy="72" r="18" fill="#F5C451"/>
+</svg>

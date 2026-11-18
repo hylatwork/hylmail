@@ -1,0 +1,33 @@
+From: Raumplanung <rooms@example.org>
+To: ada@example.org
+Subject: Einladung: Projektbesprechung
+Date: Tue, 12 Nov 2024 12:00:00 +0000
+Message-ID: <invite-1@example.org>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="cal"
+
+--cal
+Content-Type: text/plain; charset=utf-8
+
+Sie sind eingeladen.
+
+--cal
+Content-Type: text/calendar; charset=utf-8; method=REQUEST
+Content-Transfer-Encoding: 7bit
+
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//HylMail//Test//DE
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:invite-1@example.org
+DTSTAMP:20241112T120000Z
+DTSTART:20241120T130000Z
+DTEND:20241120T140000Z
+SUMMARY:Projektbesprechung
+ORGANIZER;CN=Raumplanung:mailto:rooms@example.org
+ATTENDEE;CN=Ada;PARTSTAT=NEEDS-ACTION:mailto:ada@example.org
+END:VEVENT
+END:VCALENDAR
+
+--cal--

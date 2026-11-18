@@ -1,0 +1,19 @@
+# graphify exclusion rules. See AGENTS.md, section "Knowledge Graph (graphify)".
+#
+# `graphify update sys-src` scans only the Rust workspace, but this file lives
+# at the repository root, so every pattern below is repository-relative
+# (gitignore syntax; a pattern containing "/" is anchored at this file's
+# directory). A .graphifyignore can only ever exclude MORE than a .gitignore,
+# never re-include a path a .gitignore already dropped.
+
+# Cargo build output (also a graphify default skip dir - kept explicit on
+# purpose, so the exclusion is documented rather than implicit).
+sys-src/target/
+
+# Installer templates, icons and packaging helper scripts: release artefacts,
+# not part of the architecture model, so they would only add noise and scan
+# time to the graph.
+sys-src/packaging/
+
+# graphify's own output must never be ingested as source.
+graphify-out/

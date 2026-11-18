@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  HylMail - WiX 3 source for the per-machine MSI.
+
+  Build from the repository root (the paths in `Source` are relative to it):
+
+    candle.exe -nologo -dHylMailVersion=0.1.0 -out dist\hylmail.wixobj packaging\windows\hylmail.wxs
+    light.exe  -nologo -sice:ICE61 -out dist\HylMail-0.1.0.msi dist\hylmail.wixobj
+
+  The `-sice:ICE61` suppresses the warning that `AllowSameVersionUpgrades`
+  normally produces; it is set on `MajorUpgrade` on purpose (see below).
+
+  The Inno Setup script next to this file produces the *per-user* installer
+  (`%LOCALAPPDATA%\Programs\HylMail`, no elevation) and is what the release page
+  offers first; this MSI is the one for a machine-wide or GPO deployment
+  (`Program Files\HylMail`, an elevation prompt, an all-users Start Menu entry).
+  Both install the same two executables and both claim the `HylMail.eml` ProgID,
+  so only one of them should be installed at a time.
+
+  Every component GUID, and the UpgradeCode, is fixed; only the Product code is
+  generated per version (`Id="*"`), which is what `MajorUpgrade` wants.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <?ifndef HylMailVersion ?>
+  <?define HylMailVersion = "0.0.0" ?>
+  <?endif ?>
+
+  <?define HylMailName = "HylMail" ?>
+  <?define HylMailPublisher = "HylMail Contributors" ?>
+  <?define HylMailUrl = "https://example.org/hylmail" ?>
+  <?define HylMailGuiExe = "hylmail-gui.exe" ?>
+  <?define HylMailCliExe = "hylmail-cli.exe" ?>
+  <?define HylMailProgId = "HylMail.eml" ?>
+  <?define HylMailUpgradeCode = "{0298E09C-BE9D-470C-B85F-0C857C3D0F10}" ?>
+
+  <Product Id="*"
+           Name="$(var.HylMailName)"
+           Language="1031"
+           Version="$(var.HylMailVersion)"
+           Manufacturer="$(var.HylMailPublisher)"
+           UpgradeCode="$(var.HylMailUpgradeCode)">
+    <Package Id="*"
+             Keywords="Installer"
+             Description="HylMail mail client"
+             Comments="IMAP, Exchange (EWS) and GroupWise mailboxes in one native client"
+             Manufacturer="$(var.HylMailPublisher)"
+             InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perMachine"
+             InstallPrivileges="elevated"
+             Platform="x64"
+             SummaryCodepage="1252" />
+
+    <!-- `AllowSameVersionUpgrades` lets a rebuilt 0.1.0 replace an installed
+         0.1.0; that is what makes the release pipeline idempotent.  It also
+         makes ICE61 complain that "the maximum version is not less than the
+         current product", which is a false positive for exactly this
+         setting, so the build suppresses that one ICE. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of HylMail is already installed. Setup will now exit."
+                  AllowSameVersionUpgrades="yes" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <!-- The icon shows up in "Apps &amp; features" and on the Start Menu entry. -->
+    <Icon Id="HylMailIcon" SourceFile="packaging\icons\hylmail.ico" />
+    <Property Id="ARPPRODUCTICON" Value="HylMailIcon" />
+    <Property Id="ARPHELPLINK" Value="$(var.HylMailUrl)" />
+
+    <!-- No `UIRef`: the package installs with the standard Windows progress
+         dialog, so it needs neither the `WixUIExtension` nor an RTF licence
+         text.  A wizard would only have dialogs to click through; everything
+         a user can choose here is one optional feature (`ADDLOCAL`). -->
+
+    <!-- The installed application is reached through the lock file in the
+         configuration directory, so the .eml association only has to start
+         `hylmail-gui.exe` with the path; a running instance takes it over. -->
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="$(var.HylMailName)">
+
+          <Component Id="HylMailGuiExe" Guid="{65F5EAC4-4CCA-498C-86BA-B7C15D6FE567}" Win64="yes">
+            <File Id="HylMailGuiFile"
+                  Source="target\release\$(var.HylMailGuiExe)"
+                  Name="$(var.HylMailGuiExe)"
+                  KeyPath="yes"
+                  Vital="yes"
+                  Checksum="yes" />
+          </Component>
+
+          <Component Id="HylMailCliExe" Guid="{3876E352-E484-4570-A61C-4D6E67607BB1}" Win64="yes">
+            <File Id="HylMailCliFile"
+                  Source="target\release\$(var.HylMailCliExe)"
+                  Name="$(var.HylMailCliExe)"
+                  KeyPath="yes"
+                  Vital="yes"
+                  Checksum="yes" />
+          </Component>
+
+          <Component Id="HylMailIconFile" Guid="{214935C1-DB62-4C65-8EF1-E33127E51575}" Win64="yes">
+            <File Id="HylMailIco"
+                  Source="packaging\icons\hylmail.ico"
+                  Name="hylmail.ico"
+                  KeyPath="yes" />
+          </Component>
+
+          <Component Id="HylMailLicenses" Guid="{2279A135-85D6-4E6C-B952-DCD17492F8B0}" Win64="yes">
+            <File Id="HylMailLicense"
+                  Source="LICENSE"
+                  Name="LICENSE.txt"
+                  KeyPath="yes" />
+          </Component>
+
+          <Component Id="HylMailProgId" Guid="{049BCC78-5268-45B8-B266-6B176DA82AD1}" Win64="yes">
+            <RegistryValue Root="HKCR"
+                           Key="$(var.HylMailProgId)"
+                           Type="string"
+                           Value="HylMail message"
+                           KeyPath="yes" />
+            <RegistryValue Root="HKCR"
+                           Key="$(var.HylMailProgId)\DefaultIcon"
+                           Type="string"
+                           Value="[INSTALLFOLDER]hylmail.ico" />
+            <RegistryValue Root="HKCR"
+                           Key="$(var.HylMailProgId)\shell\open\command"
+                           Type="string"
+                           Value="&quot;[INSTALLFOLDER]$(var.HylMailGuiExe)&quot; &quot;%1&quot;" />
+            <RegistryValue Root="HKCR"
+                           Key="$(var.HylMailProgId)\Application"
+                           Name="ApplicationCompany"
+                           Type="string"
+                           Value="$(var.HylMailPublisher)" />
+            <!-- An empty value under OpenWithProgids adds HylMail to the "Open
+                 with" list without stealing the .eml association. -->
+            <RegistryValue Root="HKCR"
+                           Key=".eml\OpenWithProgids"
+                           Name="$(var.HylMailProgId)"
+                           Type="string"
+                           Value="" />
+          </Component>
+
+          <Component Id="HylMailMailClient" Guid="{12330963-5FF6-45B7-BF82-30B3C28313A7}" Win64="yes">
+            <RegistryValue Root="HKCR"
+                           Key="Software\Clients\Mail\$(var.HylMailName)"
+                           Type="string"
+                           Value="$(var.HylMailName)"
+                           KeyPath="yes" />
+            <RegistryValue Root="HKCR"
+                           Key="Software\Clients\Mail\$(var.HylMailName)\shell\open\command"
+                           Type="string"
+                           Value="&quot;[INSTALLFOLDER]$(var.HylMailGuiExe)&quot; &quot;%1&quot;" />
+          </Component>
+        </Directory>
+      </Directory>
+
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="HylMailProgramMenu" Name="$(var.HylMailName)">
+          <Component Id="HylMailStartMenu" Guid="{C6C2E918-385E-4CFD-9BA1-AEB2BBD8616D}">
+            <Shortcut Id="HylMailStartMenuShortcut"
+                      Name="$(var.HylMailName)"
+                      Description="$(var.HylMailName) starten"
+                      Target="[INSTALLFOLDER]$(var.HylMailGuiExe)"
+                      WorkingDirectory="INSTALLFOLDER"
+                      Icon="HylMailIcon" />
+            <Shortcut Id="HylMailStartMenuCliShortcut"
+                      Name="$(var.HylMailName) (Befehlszeile)"
+                      Description="Die HylMail-Befehlszeile"
+                      Target="[INSTALLFOLDER]$(var.HylMailCliExe)"
+                      WorkingDirectory="INSTALLFOLDER" />
+            <RemoveFolder Id="HylMailProgramMenuFolder" Directory="HylMailProgramMenu" On="uninstall" />
+            <RegistryValue Root="HKCU"
+                           Key="Software\$(var.HylMailName)"
+                           Name="StartMenu"
+                           Type="integer"
+                           Value="1"
+                           KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+
+      <Directory Id="DesktopFolder">
+        <Component Id="HylMailDesktopShortcut" Guid="{C1677586-707A-42A8-8BE4-650CB46E6688}">
+          <Shortcut Id="HylMailDesktopShortcutLink"
+                    Name="$(var.HylMailName)"
+                    Description="$(var.HylMailName) starten"
+                    Target="[INSTALLFOLDER]$(var.HylMailGuiExe)"
+                    WorkingDirectory="INSTALLFOLDER"
+                    Icon="HylMailIcon" />
+          <RegistryValue Root="HKCU"
+                         Key="Software\$(var.HylMailName)"
+                         Name="DesktopShortcut"
+                         Type="integer"
+                         Value="1"
+                         KeyPath="yes" />
+        </Component>
+      </Directory>
+    </Directory>
+
+    <Feature Id="MainFeature" Title="$(var.HylMailName)" Level="1">
+      <ComponentRef Id="HylMailGuiExe" />
+      <ComponentRef Id="HylMailCliExe" />
+      <ComponentRef Id="HylMailIconFile" />
+      <ComponentRef Id="HylMailLicenses" />
+      <ComponentRef Id="HylMailProgId" />
+      <ComponentRef Id="HylMailMailClient" />
+      <ComponentRef Id="HylMailStartMenu" />
+    </Feature>
+
+    <!-- Not installed by default; `msiexec /i … ADDLOCAL=DesktopShortcut` or a
+         transformed package turns it on, exactly like the Inno "desktopicon"
+         task. -->
+    <Feature Id="DesktopShortcut" Title="Desktop shortcut" Level="2">
+      <ComponentRef Id="HylMailDesktopShortcut" />
+    </Feature>
+  </Product>
+</Wix>

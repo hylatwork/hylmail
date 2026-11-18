@@ -1,0 +1,14 @@
+# HylMail formatting policy.
+#
+# Only stable rustfmt options are listed: nightly-only knobs would make a
+# stable `cargo fmt --check` print "unstable feature" warnings on every run.
+edition = "2021"
+max_width = 100
+tab_spaces = 4
+# `Auto` preserves whatever newline style the file already uses, so
+# `cargo fmt --check` stays green on the CRLF working tree used here *and* on
+# the LF checkout in the Linux CI job. Do not pin "Unix"/"Windows": each would
+# break one of the two checkouts.
+newline_style = "Auto"
+use_small_heuristics = "Default"
+merge_derives = true

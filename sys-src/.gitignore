@@ -1,0 +1,31 @@
+# Rust build output
+/target
+**/*.rs.bk
+*.pdb
+*.ilk
+
+# Installers and archives produced by the packaging scripts
+/dist
+*.wixobj
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# Local runtime state: never commit a user's mailbox or credentials
+*.db
+*.db-wal
+*.db-shm
+absturz.txt
+absturz.txt.reported-*
+logs/
+settings.json
+accounts.json
+rules.json
+drafts.json
+outbox.json
+
+# OS noise
+.DS_Store
+Thumbs.db

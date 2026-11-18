@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for HylMail.app/Contents/Info.plist.
+
+  {{VERSION}} is replaced with `env!("CARGO_PKG_VERSION")` by the release
+  pipeline.  CFBundleIdentifier must stay in sync with `hylmail_gui::BUNDLE_ID`,
+  which is asserted by a unit test.
+-->
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>de</string>
+	<key>CFBundleExecutable</key>
+	<string>hylmail-gui</string>
+	<key>CFBundleIdentifier</key>
+	<string>de.hylmail.HylMail</string>
+	<key>CFBundleIconFile</key>
+	<string>HylMail</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>HylMail</string>
+	<key>CFBundleDisplayName</key>
+	<string>HylMail</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>{{VERSION}}</string>
+	<key>CFBundleVersion</key>
+	<string>{{VERSION}}</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSRequiresAquaSystemAppearance</key>
+	<false/>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Mail message</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>HylMail</string>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>eml</string>
+			</array>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.apple.mail.email</string>
+				<string>public.email-message</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
